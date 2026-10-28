@@ -1,6 +1,9 @@
 # ed-transport
 
+[![Version](https://img.shields.io/badge/version-v0.1.0-blue.svg)](CHANGELOG.md)
+
 Resilient Hexagonal HTTP transport and telemetry delivery engine for Elite Dangerous
+
 
 ## Architectural Governance
 This service is architected in accordance with Hexagonal Architecture (Ports and Adapters).
