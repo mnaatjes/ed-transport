@@ -2,12 +2,12 @@
 title: "Use-Case Specification: UC-01 Dispatch Resilient HTTP Request"
 use_case_id: "UC-01"
 status: "approved"
-version: "1.0.0"
+version: "1.1.0"
 level: "sea_level"
-primary_actor: "Downstream Integration Client (ed-capi, ed-eddn, ed-connectors)"
+primary_actor: "Downstream Integration Client (ed-capi, ed-eddn, ed-connectors, ed-state)"
 created_at: "2026-10-28"
 last_updated_at: "2026-10-28"
-tags: ["use-case", "requirements", "transport", "http", "retry", "rate-limiting"]
+tags: ["use-case", "requirements", "transport", "http", "retry", "rate-limiting", "bidirectional"]
 ---
 
 # Use-Case Specification: UC-01 Dispatch Resilient HTTP Request
@@ -16,11 +16,11 @@ tags: ["use-case", "requirements", "transport", "http", "retry", "rate-limiting"
 
 ```text
 +-----------------------------------------------------------------------------------+
-| System Boundary: ed-transport (Transport Engine & Network Core)                    |
+| System Boundary: ed-transport (Bidirectional HTTP Engine & Network Core)          |
 |                                                                                   |
 |  [Actor: Downstream Client]                                                       |
 |       |                                                                           |
-|       | 1. send(HttpRequestDTO)                                                   |
+|       | 1. send(HttpRequestDTO) [GET, POST, PUT, DELETE]                          |
 |       v                                                                           |
 |  +--------------------+    +---------------------+    +------------------------+  |
 |  | Rate Limit Gate    | -> | Credential Injection| -> | Resilient Retry Engine |  |
@@ -28,14 +28,15 @@ tags: ["use-case", "requirements", "transport", "http", "retry", "rate-limiting"
 |                                                                    |              |
 |                                                                    v              |
 |                                                     [Target HTTP Endpoint]        |
-|                                                     (EDDN / Inara / Frontier CAPI)|
+|                                                     (EDDN / Inara / CAPI / Telemetry)
 +-----------------------------------------------------------------------------------+
 ```
 
 ### 1.1 In-Scope (Within `ed-transport` Boundary)
-* Acceptance of typed, immutable HTTP request DTOs (`url`, `method`, `headers`, `body_bytes`, `timeout`).
+* Bidirectional HTTP exchange: Dispatches both outbound egress payloads (`POST`, `PUT`) and query requests (`GET`, `DELETE`) to external and local endpoints.
+* Acceptance of typed, immutable HTTP request DTOs (`url`, `method`, `headers`, `query_params`, `body_bytes`, `timeout`).
 * Destination-specific rate-limiting enforcement via token-bucket and sliding-window algorithms.
-* Authentication credential resolution and header/query injection via pluggable `CredentialProvider` ports.
+* Authentication credential resolution and header injection via pluggable `CredentialProvider` ports (supporting pre-shared keys, Bearer tokens, and basic auth).
 * Automated retry loop with exponential backoff and randomized decorrelated jitter for transient network failures (`5xx`, socket timeout, connection reset).
 * Dispassionate, sanitized response wrapping into typed `HttpResponseDTO` with header masking for sensitive security credentials.
 
@@ -43,15 +44,16 @@ tags: ["use-case", "requirements", "transport", "http", "retry", "rate-limiting"
 * **Domain Data Modeling:** Parsing Elite Dangerous telemetry events, journal records, or cockpit state (governed by `ed-models` and `ed-telemetry`).
 * **Schema Validation:** Verifying that payload bodies comply with EDDN JSON schemas or Inara API contracts (governed by `ed-eddn` and `ed-connectors`).
 * **OAuth2 Grant Negotiation:** Managing Frontier authorization code redirection, browser handshakes, or PKCE verifier generation (governed by `ed-capi`).
-* **Persistent Event Storage:** Long-term archival or querying of historical events (governed by `ed-telemetry` persistence).
+* **Application Logging Configuration:** Configuring root loggers, formatters, or file rotators on disk (owned by the host application).
+* **Persistent Database Storage:** Schema creation, migrations, or relational tables (owned by consumer packages).
 
 ---
 
 ## 2. Actors and Stakeholders
 
-* **Primary Actor:** Downstream Integration Client (`ed-capi`, `ed-eddn`, `ed-connectors`).
-* **Secondary Actor (Driven):** Remote Destination Server (e.g. `eddn.edcd.io`, `inara.cz/api/v2`, Frontier CAPI gateway).
-* **Stakeholder (Operator):** Demands zero unhandled crashes, zero telemetry loss during transient glitches, and protection against IP bans from third-party APIs.
+* **Primary Actor:** Downstream Integration Client (`ed-capi`, `ed-eddn`, `ed-connectors`, `ed-state`).
+* **Secondary Actor (Driven):** Remote Destination Server (e.g. `eddn.edcd.io`, `inara.cz/api/v2`, Frontier CAPI, or local `ed-telemetry`).
+* **Stakeholder (Operator):** Demands zero unhandled crashes, zero telemetry loss during transient glitches, protection against IP bans from third-party APIs, and zero credential leakage.
 
 ---
 
@@ -85,7 +87,7 @@ tags: ["use-case", "requirements", "transport", "http", "retry", "rate-limiting"
 ### 2a. Rate Limit Exceeded (Throttling)
 * `2a1.` System detects token-bucket exhaustion or destination cooldown active.
 * `2a2.` If client configured blocking execution (`blocking=True`):
-  * System pauses the caller execution thread for the calculated backoff period ($\le \text{max\_wait\_seconds}$).
+  * System pauses caller execution thread for calculated backoff period ($\le \text{max\_wait\_seconds}$).
   * Upon timer expiration, system consumes a replenished token and resumes at Step 3.
 * `2a3.` If client configured non-blocking execution (`blocking=False`) or wait ceiling exceeded:
   * System aborts transmission and raises `RateLimitExceededError` containing `retry_after_seconds`.
@@ -100,7 +102,7 @@ tags: ["use-case", "requirements", "transport", "http", "retry", "rate-limiting"
     * System resumes at Step 2 (re-checking rate limits and re-dispatching).
   * If attempt count $\ge$ `max_retries`:
     * System logs warning with sanitized endpoint details.
-    * System raises `MaxRetriesExceededError` bundling the root cause exception and attempt history.
+    * System raises `MaxRetriesExceededError` bundling root cause exception and attempt history.
 
 ### 5a. HTTP 401 Unauthorized / Token Expiry
 * `5a1.` Destination server returns `HTTP 401 Unauthorized`.

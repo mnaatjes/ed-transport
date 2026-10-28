@@ -1,1 +1,3 @@
-"""Package root for {{ project_name }}."""
+"""Package root for ed-transport."""
+
+__version__ = "0.1.0"
