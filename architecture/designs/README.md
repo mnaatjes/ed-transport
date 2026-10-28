@@ -24,4 +24,5 @@ Governed by IEEE 1016-2009 (Standard for Information Technology—Systems Design
 
 | Number | Title | Status | Date | Primary Author |
 | :---: | :--- | :---: | :---: | :--- |
-| **SDD-001** | [SDD-001: Scope and Boundary Enforcement Architecture](0001_scope_and_boundary_enforcement_architecture.md) | **draft** | 2026-10-28 | @mnaatjes |
+| **SDD-001** | [SDD-001: Scope and Boundary Enforcement Architecture](0001_scope_and_boundary_enforcement_architecture.md) | **approved** | 2026-10-28 | @mnaatjes |
+| **SDD-002** | [SDD-002: TransportClient Driving Facade Implementation Architecture](0002_transport_client_driving_facade_architecture.md) | **draft** | 2026-10-28 | @mnaatjes |
