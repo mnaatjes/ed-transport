@@ -3,7 +3,7 @@ title: "ADR 0005: Hexagonal Architecture Component Inventory and Implementation 
 status: "accepted"
 date: "2026-10-28"
 deciders: ["Core Architecture Team"]
-consulted: ["ADR 0001", "ADR 0002", "ADR 0003", "ADR 0004", "UC-01", "UC-02", "UC-03", "UC-04", "SDD-002"]
+consulted: ["ADR 0001", "ADR 0002", "ADR 0003", "ADR 0004", "UC-01", "UC-02", "UC-03", "UC-04", "SDD-002", "RISK-11", "RISK-12", "RISK-13"]
 informed: ["All Engineers", "Downstream Consumer Authors (ed-capi, ed-eddn, ed-connectors, ed-telemetry)"]
 tags: ["adr", "architecture", "hexagonal", "roadmap", "components", "ports", "adapters", "use-cases"]
 ---
@@ -220,12 +220,37 @@ The components will be delivered in 4 sequential, independently testable phases:
 
 ---
 
+---
+
+## 6. Risk Mitigations and Design Safeguards
+
+To prevent operational failures identified in the Master Risk Register, the component designs incorporate specific structural safeguards:
+
+### 6.1 Mitigation for `RISK-11`: SQLite Spool Lock Contention & File Corruption
+* **WAL Mode & Busy Timeout:** `SqliteSpoolStorageAdapter` initializes database connections with `PRAGMA journal_mode=WAL` (Write-Ahead Logging) and `PRAGMA busy_timeout=5000` to prevent `database is locked` errors during concurrent thread access.
+* **Serialized Write Gate:** Internal SQLite writes are guarded by a process-level re-entrant lock (`threading.RLock`) to eliminate write transaction collisions.
+* **Automated Corruption Recovery:** If SQLite raises `sqlite3.DatabaseError` on startup or query (e.g. following sudden Steam Deck battery death), the adapter renames the corrupt file (`.corrupt.<timestamp>`), re-initializes a fresh database schema, and logs a critical error without crashing the host daemon.
+
+### 6.2 Mitigation for `RISK-12`: SSE Telemetry Stream Reconnection Storms
+* **Exponential Backoff & Jitter:** `ConsumeTelemetryStreamUseCase` enforces an exponential backoff algorithm with randomized decorrelated jitter on reconnect attempts:
+  $$\text{Delay} = \min(\text{max\_reconnect\_delay}, \text{base\_delay} \times 2^{\text{consecutive\_failures}} + \text{jitter})$$
+* **Ceiling Clamp:** Caps maximum reconnection interval at 60 seconds.
+* **Last-Event-ID Cursor:** Tracks monotonic `event_id` and injects `Last-Event-ID` headers upon reconnecting to resume the stream seamlessly without event duplication.
+
+### 6.3 Mitigation for `RISK-13`: Spool Deletion Under FIFO Overflow & Request Starvation
+* **Explicit Policy Enforcement:** Under `SpoolConfig(overflow_strategy="reject")`, attempting to buffer beyond `max_capacity_bytes` immediately raises `SpoolCapacityExceededError`, allowing callers to handle backpressure explicitly.
+* **Strict Monotonic FIFO Ordering:** Under `overflow_strategy="drop_oldest"`, deletion queries strictly target the oldest records by monotonically increasing serial sequence numbers, guaranteeing newer telemetry updates are preserved.
+* **Configurable Byte Limits:** Downstream callers configure storage bounds per application rather than relying on unbounded system memory.
+
+---
+
 ## Consequences
 
 ### Positive
 * Complete roadmap provides clear, isolated implementation targets without architectural ambiguity.
 * Every component strictly respects Hexagonal Architecture invariants and passes automated AST quality gates.
 * Phase separation allows incremental delivery with full unit and contract test coverage at each step.
+* Rigorous mitigations for SQLite concurrency, SSE reconnect storms, and buffer overflows prevent fleet crashes.
 
 ### Expected Maintenance Costs (Design Trade-offs)
 * Dual sync/async paths require maintaining parallel interactors and engine adapters.
