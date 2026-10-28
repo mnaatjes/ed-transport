@@ -27,3 +27,4 @@ Governed by Markdown Architectural Decision Records (MADR 3.0).
 | **0002** | [ADR 0002: Driving Adapter Facade Definition and API Surface](0002_driving_adapter_facade_definition.md) | **accepted** | 2026-10-28 |
 | **0003** | [ADR 0003: Shared Library Logging Architecture and Boundary Enforcement](0003_shared_library_logging_architecture_and_boundary_enforcement.md) | **accepted** | 2026-10-28 |
 | **0004** | [ADR 0004: Error Handling Architecture and Boundary Enforcement](0004_error_handling_architecture_and_boundary_enforcement.md) | **accepted** | 2026-10-28 |
+| **0005** | [ADR 0005: Hexagonal Architecture Component Inventory and Implementation Roadmap](0005_hexagonal_architecture_implementation_roadmap.md) | **accepted** | 2026-10-28 |
