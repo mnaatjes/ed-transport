@@ -57,6 +57,7 @@ class SseStreamEngineAdapter(StreamEnginePort):
                             )
                             event_type = "message"
                             data_lines = []
+                            event_id = None
                         continue
 
                     if line.startswith(":"):
