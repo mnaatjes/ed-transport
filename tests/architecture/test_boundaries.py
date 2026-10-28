@@ -966,3 +966,142 @@ def test_zero_os_daemon_lifecycle_management_in_core() -> None:
                         f"Core file {rel_path} imports forbidden lifecycle module: "
                         f"{node.module}"
                     )
+
+
+def test_logging_restricts_add_handler_calls() -> None:
+    """Asserts that addHandler is only called in sanctioned bootstrap locations (ADR-0003)."""
+    pkg_root = _get_package_root()
+
+    for py_file in pkg_root.rglob("*.py"):
+        rel_path = str(py_file.relative_to(pkg_root))
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                if isinstance(node.func, ast.Attribute) and node.func.attr == "addHandler":
+                    assert rel_path in {
+                        "__init__.py",
+                        "bootstrap/logging.py",
+                    }, f"Illegal addHandler() call in {rel_path}"
+
+
+def test_logging_forbids_in_code_set_level_outside_bootstrap() -> None:
+    """Asserts that setLevel is never invoked outside bootstrap/logging.py (ADR-0003)."""
+    pkg_root = _get_package_root()
+
+    for py_file in pkg_root.rglob("*.py"):
+        rel_path = str(py_file.relative_to(pkg_root))
+        if rel_path == "bootstrap/logging.py":
+            continue
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                if isinstance(node.func, ast.Attribute) and node.func.attr == "setLevel":
+                    raise AssertionError(f"Illegal setLevel() call in library file: {rel_path}")
+
+
+def test_logging_forbids_concrete_handlers_outside_bootstrap() -> None:
+    """Asserts concrete handlers/formatters are never imported outside bootstrap/logging.py."""
+    pkg_root = _get_package_root()
+    forbidden_symbols = {
+        "StreamHandler",
+        "FileHandler",
+        "RotatingFileHandler",
+        "TimedRotatingFileHandler",
+        "SysLogHandler",
+        "SocketHandler",
+        "MemoryHandler",
+        "HTTPHandler",
+        "Formatter",
+    }
+
+    for py_file in pkg_root.rglob("*.py"):
+        rel_path = str(py_file.relative_to(pkg_root))
+        if rel_path == "bootstrap/logging.py":
+            continue
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    assert (
+                        alias.name not in forbidden_symbols
+                    ), f"Illegal logging import in {rel_path}: {alias.name}"
+            elif isinstance(node, ast.ImportFrom):
+                for alias in node.names:
+                    assert (
+                        alias.name not in forbidden_symbols
+                    ), f"Illegal logging import in {rel_path}: {alias.name}"
+
+
+def test_logging_forbids_third_party_logging_engines() -> None:
+    """Asserts that third-party logging modules are never imported anywhere in the package."""
+    pkg_root = _get_package_root()
+    forbidden_frameworks = {"loguru", "structlog", "sentry_sdk"}
+
+    for py_file in pkg_root.rglob("*.py"):
+        rel_path = str(py_file.relative_to(pkg_root))
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    root_mod = alias.name.split(".")[0]
+                    assert (
+                        root_mod not in forbidden_frameworks
+                    ), f"Forbidden logging framework in {rel_path}: {alias.name}"
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                root_mod = node.module.split(".")[0]
+                assert (
+                    root_mod not in forbidden_frameworks
+                ), f"Forbidden logging framework in {rel_path}: {node.module}"
+
+
+def test_logging_enforces_lazy_formatting_no_fstrings() -> None:
+    """Asserts logger calls avoid f-strings to enforce lazy evaluation (ADR-0003)."""
+    pkg_root = _get_package_root()
+    logger_methods = {"debug", "info", "warning", "error", "critical", "exception"}
+
+    for py_file in pkg_root.rglob("*.py"):
+        rel_path = str(py_file.relative_to(pkg_root))
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if node.func.attr in logger_methods and node.args:
+                    first_arg = node.args[0]
+                    assert not isinstance(first_arg, ast.JoinedStr), (
+                        f"Logger call in {rel_path}:{node.lineno} uses f-string; "
+                        "use lazy formatting: logger.debug('msg %s', arg)"
+                    )
+
+
+def test_error_handling_forbids_process_termination() -> None:
+    """Asserts library code never terminates host process via sys.exit/os._exit (ADR-0004)."""
+    pkg_root = _get_package_root()
+    forbidden_calls = {"exit", "_exit"}
+
+    for py_file in pkg_root.rglob("*.py"):
+        rel_path = str(py_file.relative_to(pkg_root))
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                if node.func.attr in forbidden_calls:
+                    if isinstance(node.func.value, ast.Name) and node.func.value.id in {
+                        "sys",
+                        "os",
+                    }:
+                        raise AssertionError(
+                            f"Illegal process termination call in {rel_path}:{node.lineno}: "
+                            f"{node.func.value.id}.{node.func.attr}()"
+                        )
+
+
+def test_ports_have_zero_third_party_exception_leaks() -> None:
+    """Asserts that port contracts do not leak external engine exception classes (ADR-0004)."""
+    pkg_root = _get_package_root()
+    ports_dir = pkg_root / "core" / "ports"
+    forbidden_types = {"HTTPError", "ClientError", "RequestError", "OperationalError"}
+
+    for py_file in ports_dir.rglob("*.py"):
+        source = py_file.read_text(encoding="utf-8")
+        for bad_type in forbidden_types:
+            assert (
+                bad_type not in source
+            ), f"Port file {py_file.name} references forbidden third-party exception: {bad_type}"

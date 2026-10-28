@@ -18,6 +18,10 @@ from ed_transport.adapters.driving import (
     AsyncTransportClient,
     TransportClient,
 )
+from ed_transport.bootstrap import (
+    configure_fleet_logging,
+    get_platform_log_dir,
+)
 from ed_transport.core.domain.exceptions import (
     InvalidPayloadTypeError,
     MaxRetriesExceededError,
@@ -228,14 +232,38 @@ class RawStreamEventDTO(DataTransferObject):
 
 ## 5. Domain Exceptions
 
-Exception taxonomy residing in `ed_transport.core.domain.exceptions`, inheriting from `DomainError`.
+Exception taxonomy residing in `ed_transport.core.domain.exceptions`, inheriting from `DomainError`. All exceptions support standard Python causal chaining via `raise ... from original_error`.
 
-| Exception | Base Class | Description |
-| :--- | :--- | :--- |
-| `TransportError` | `DomainError` | General base class for all transport failure modes. |
-| `TransportTimeoutError` | `DomainError` | HTTP socket read/connect timeout exceeded. |
-| `TransportConnectionError` | `DomainError` | DNS resolution failure or network disconnect. |
-| `RateLimitExceededError` | `DomainError` | Rate limiter threshold saturated without burst capacity. |
-| `MaxRetriesExceededError` | `DomainError` | Maximum retry attempts exhausted without successful response. |
-| `SpoolCapacityExceededError` | `DomainError` | Offline spool buffer byte quota exceeded. |
-| `InvalidPayloadTypeError` | `DomainError` | Payload supplied as non-`bytes`/non-`str` (e.g. dict or domain model). |
+| Exception | Base Class | Diagnostic Attributes | Description |
+| :--- | :--- | :--- | :--- |
+| `TransportError` | `DomainError` | *(message)* | General base class for all transport failure modes. |
+| `TransportTimeoutError` | `DomainError` | `endpoint: str`<br/>`timeout_seconds: float`<br/>`attempt_count: int` | HTTP socket connect/read timeout exceeded. |
+| `TransportConnectionError` | `DomainError` | `endpoint: str`<br/>`details: str` | DNS resolution failure, socket reset, or network drop. |
+| `RateLimitExceededError` | `DomainError` | `destination_key: str`<br/>`retry_after_seconds: float` | Destination rate limit quota exhausted without burst capacity. |
+| `MaxRetriesExceededError` | `DomainError` | `endpoint: str`<br/>`total_attempts: int`<br/>`last_error: Exception \| None` | Consecutive retry attempts exhausted without successful response. |
+| `SpoolCapacityExceededError` | `DomainError` | `current_depth: int`<br/>`capacity_ceiling: int` | Offline spool buffer byte quota exceeded under reject policy. |
+| `InvalidPayloadTypeError` | `DomainError` | `invalid_type: type` | Payload supplied as non-`bytes`/non-`str` (domain entity must be serialized first). |
+
+---
+
+## 6. Bootstrap Logging API
+
+Opt-in logging initialization factory residing in `ed_transport.bootstrap.logging`.
+
+```python
+def configure_fleet_logging(
+    app_name: str,
+    log_dir: Path | None = None,
+    level: int = logging.INFO,
+    max_bytes: int = 5 * 1024 * 1024,
+    backup_count: int = 5,
+) -> Path: ...
+
+def get_platform_log_dir(app_name: str) -> Path: ...
+```
+
+* `app_name`: Fleet daemon application name (e.g. `"ed-capi"`).
+* `log_dir`: Optional directory override. Defaults to `get_platform_log_dir(app_name)`.
+* `level`: Minimum root logging severity threshold.
+* `max_bytes`: Byte limit per log file before rotation (default: 5 MB).
+* `backup_count`: Count of rotated historical log files to retain (default: 5).
