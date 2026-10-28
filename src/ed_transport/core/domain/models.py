@@ -43,12 +43,32 @@ class RetryConfig:
 
 
 @dataclass(frozen=True)
+class RateLimitRule:
+    """Rate limit rule for destination matching."""
+
+    destination_pattern: str
+    requests_per_second: float = 5.0
+    burst_capacity: int = 10
+
+    def __post_init__(self) -> None:
+        """Validates rate limit rule parameters."""
+        if not self.destination_pattern:
+            raise DomainValidationError("destination_pattern cannot be empty")
+        if self.requests_per_second <= 0:
+            raise DomainValidationError("requests_per_second must be positive")
+        if self.burst_capacity <= 0:
+            raise DomainValidationError("burst_capacity must be positive")
+
+
+@dataclass(frozen=True)
 class SpoolConfig:
     """Configuration for bounded circular spool buffer."""
 
     max_capacity: int = 1000
     memory_limit_bytes: int = 10 * 1024 * 1024  # 10 MB default
     eviction_policy: str = "DropOldest"
+    storage_path: str = ""  # Empty = in-memory buffer
+    auto_recover_corrupt: bool = False  # If True, re-creates corrupt db
 
     def __post_init__(self) -> None:
         """Validates spool configuration."""

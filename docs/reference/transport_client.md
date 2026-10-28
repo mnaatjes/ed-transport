@@ -14,9 +14,19 @@ This reference details the public interface, configuration objects, data transfe
 ## 1. Module Exports
 
 ```python
-from ed_transport.adapters.driving import (
+from ed_transport import (
     AsyncTransportClient,
+    HttpRequestDTO,
+    HttpResponseDTO,
+    RateLimitConfig,
+    RateLimitRule,
+    RawStreamEventDTO,
+    RetryConfig,
+    SpoolConfig,
+    SpoolRecordDTO,
     TransportClient,
+    create_async_transport_client,
+    create_transport_client,
 )
 from ed_transport.bootstrap import (
     configure_fleet_logging,
@@ -27,19 +37,10 @@ from ed_transport.core.domain.exceptions import (
     MaxRetriesExceededError,
     RateLimitExceededError,
     SpoolCapacityExceededError,
+    SpoolStorageCorruptError,
     TransportConnectionError,
     TransportError,
     TransportTimeoutError,
-)
-from ed_transport.core.domain.models import (
-    RateLimitConfig,
-    RetryConfig,
-    SpoolConfig,
-)
-from ed_transport.core.ports.dto import (
-    HttpRequestDTO,
-    HttpResponseDTO,
-    RawStreamEventDTO,
 )
 ```
 

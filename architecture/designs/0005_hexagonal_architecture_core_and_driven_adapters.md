@@ -196,19 +196,14 @@ class SpoolRecordDTO(DataTransferObject):
 All secondary ports reside under `core/ports/driven/` and inherit from `abc.ABC`:
 
 ```python
-# http_engine_port.py
-class HttpEnginePort(abc.ABC):
-    @abc.abstractmethod
+# engine_port.py
+class TransportEnginePort(DrivenPort, Protocol):
     def send(self, request: HttpRequestDTO) -> HttpResponseDTO: ...
-    @abc.abstractmethod
     def close(self) -> None: ...
 
-# async_http_engine_port.py
-class AsyncHttpEnginePort(abc.ABC):
-    @abc.abstractmethod
+class AsyncTransportEnginePort(DrivenPort, Protocol):
     async def send_async(self, request: HttpRequestDTO) -> HttpResponseDTO: ...
-    @abc.abstractmethod
-    async def aclose() -> None: ...
+    async def aclose(self) -> None: ...
 
 # rate_limiter_port.py
 class RateLimiterPort(abc.ABC):
@@ -246,7 +241,7 @@ class StreamEnginePort(abc.ABC):
 
 #### A. `ExecuteHttpRequestUseCase`
 * **Port Implemented:** `TransportPort`.
-* **Dependencies Injected:** `HttpEnginePort`, `RateLimiterPort`, `RetryConfig`, `RateLimitConfig`.
+* **Dependencies Injected:** `TransportEnginePort`, `RateLimiterPort`, `RetryConfig`, `RateLimitConfig`.
 * **Execution Flow:**
   1. Identifies destination key from `request.url`.
   2. Invokes `rate_limiter.acquire(destination, timeout)`. Raises `RateLimitExceededError` if quota cannot be fulfilled within timeout.
@@ -260,7 +255,7 @@ class StreamEnginePort(abc.ABC):
 
 #### B. `AsyncExecuteHttpRequestUseCase`
 * **Port Implemented:** `AsyncTransportPort`.
-* **Dependencies Injected:** `AsyncHttpEnginePort`, `RateLimiterPort`, `RetryConfig`, `RateLimitConfig`.
+* **Dependencies Injected:** `AsyncTransportEnginePort`, `RateLimiterPort`, `RetryConfig`, `RateLimitConfig`.
 * **Execution Flow:** Asynchronous equivalent utilizing `await rate_limiter.acquire_async()`, `await http_engine.send_async()`, and non-blocking `await asyncio.sleep()`.
 
 #### C. `DrainSpoolBufferUseCase`
