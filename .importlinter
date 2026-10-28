@@ -12,6 +12,13 @@ forbidden_modules =
     ed_transport.adapters
     external
     frameworks
+    ed_models
+    jsonschema
+    fastjsonschema
+    sqlite3
+    sqlalchemy
+    alembic
+    psutil
 
 [importlinter:contract:inward_dependency_direction]
 name = inward_dependency_direction
@@ -42,6 +49,14 @@ forbidden_modules =
     flask
     click
     typer
+    ed_models
+    jsonschema
+    fastjsonschema
+    sqlite3
+    sqlalchemy
+    alembic
+    psutil
+
 
 [importlinter:contract:composition_root_isolation]
 name = composition_root_isolation
