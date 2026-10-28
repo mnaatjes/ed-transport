@@ -277,6 +277,8 @@ def test_use_cases_follow_lexical_and_structural_conventions() -> None:
         "Sync",
         "Register",
         "Submit",
+        "Drain",
+        "Consume",
     )
 
     use_cases_audited = 0
@@ -290,7 +292,8 @@ def test_use_cases_follow_lexical_and_structural_conventions() -> None:
                 assert node.name.endswith(
                     "UseCase"
                 ), f"Class {node.name} in {py_file.name} must end with 'UseCase'"
-                assert node.name.startswith(
+                stripped_name = node.name[5:] if node.name.startswith("Async") else node.name
+                assert stripped_name.startswith(
                     allowed_verb_prefixes
                 ), f"Use case {node.name} in {py_file.name} must start with an imperative verb"
 
@@ -955,17 +958,15 @@ def test_zero_os_daemon_lifecycle_management_in_core() -> None:
                 if isinstance(node, ast.Import):
                     for alias in node.names:
                         rel_path = py_file.relative_to(pkg_root)
-                        assert alias.name not in forbidden_modules, (
-                            f"Core file {rel_path} imports forbidden lifecycle module: "
-                            f"{alias.name}"
-                        )
+                        assert (
+                            alias.name not in forbidden_modules
+                        ), f"Core file {rel_path} imports forbidden lifecycle module: {alias.name}"
                 elif isinstance(node, ast.ImportFrom) and node.module:
                     root_mod = node.module.split(".")[0]
                     rel_path = py_file.relative_to(pkg_root)
-                    assert root_mod not in forbidden_modules, (
-                        f"Core file {rel_path} imports forbidden lifecycle module: "
-                        f"{node.module}"
-                    )
+                    assert (
+                        root_mod not in forbidden_modules
+                    ), f"Core file {rel_path} imports forbidden lifecycle module: {node.module}"
 
 
 def test_logging_restricts_add_handler_calls() -> None:

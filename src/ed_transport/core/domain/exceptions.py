@@ -90,3 +90,15 @@ class InvalidPayloadTypeError(DomainError):
             "Domain entities from ed-models must be serialized prior to dispatch."
         )
         self.invalid_type = invalid_type
+
+
+class SpoolStorageCorruptError(DomainError):
+    """Raised when an unrecoverable database or storage corruption is detected."""
+
+    def __init__(self, storage_path: str, details: str = "") -> None:
+        msg = f"Spool storage file at '{storage_path}' is corrupted"
+        if details:
+            msg += f": {details}"
+        super().__init__(msg)
+        self.storage_path = storage_path
+        self.details = details

@@ -19,20 +19,19 @@ When network conditions are transient or completely disconnected, use `send_buff
 
 ```python
 import json
-from ed_transport.adapters.driving import TransportClient
+from ed_transport import TransportClient, create_transport_client
 from ed_transport.core.domain.models import SpoolConfig
 
-# Configure bounded spool (e.g. 20 MB max buffer)
+# Configure persistent SQLite spool (e.g. 20 MB max buffer with auto-recovery)
 spool_cfg = SpoolConfig(
-    max_capacity_bytes=20 * 1024 * 1024,
-    overflow_strategy="drop_oldest"
+    max_capacity=5000,
+    memory_limit_bytes=20 * 1024 * 1024,
+    storage_path="/var/tmp/ed_spool.db",
+    eviction_policy="DropOldest",
+    auto_recover_corrupt=True,
 )
 
-with TransportClient(
-    transport_port=http_port,
-    spool_port=spool_adapter,
-    spool_config=spool_cfg
-) as client:
+with create_transport_client(spool_config=spool_cfg) as client:
     event_payload = json.dumps({
         "event": "FSDJump",
         "StarSystem": "Sol",

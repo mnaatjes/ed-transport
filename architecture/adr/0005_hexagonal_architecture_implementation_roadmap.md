@@ -124,11 +124,11 @@ Chosen Option: **Implement a 5-tier Hexagonal Component Inventory with Outside-I
 
 All secondary ports must be abstract (`abc.ABC` or `@runtime_checkable Protocol`) and live under `core/ports/driven/`:
 
-1. **`HttpEnginePort` (`http_engine_port.py`):**
+1. **`TransportEnginePort` (`engine_port.py`):**
    * Synchronous SPI for raw network transmission.
    * `send(request: HttpRequestDTO) -> HttpResponseDTO`
    * `close() -> None`
-2. **`AsyncHttpEnginePort` (`async_http_engine_port.py`):**
+2. **`AsyncTransportEnginePort` (`engine_port.py`):**
    * Asynchronous SPI for raw network transmission.
    * `async send_async(request: HttpRequestDTO) -> HttpResponseDTO`
    * `async aclose() -> None`
@@ -157,7 +157,7 @@ Stateless interactors orchestrating business logic and implementing driving port
 
 1. **`ExecuteHttpRequestUseCase` (`execute_request.py`):**
    * Implements `TransportPort`.
-   * Injects: `HttpEnginePort`, `RateLimiterPort`, `RetryConfig`, `RateLimitConfig`.
+   * Injects: `TransportEnginePort`, `RateLimiterPort`, `RetryConfig`, `RateLimitConfig`.
    * Enforces token bucket rate limits, handles jittered retries on 429/503/network drops, and preserves diagnostic causal traces.
 2. **`AsyncExecuteHttpRequestUseCase` (`execute_request_async.py`):**
    * Implements `AsyncTransportPort`.
@@ -211,7 +211,7 @@ Concrete implementations of secondary SPIs:
 The components will be delivered in 4 sequential, independently testable phases:
 
 * **Phase 1: HTTP Execution Engine & Rate Limiter**
-  * Core: `HttpEnginePort`, `AsyncHttpEnginePort`, `RateLimiterPort`.
+  * Core: `TransportEnginePort`, `AsyncTransportEnginePort`, `RateLimiterPort`.
   * Adapters: `HttpxSyncEngineAdapter`, `HttpxAsyncEngineAdapter`, `TokenBucketRateLimiter`.
   * Use Cases: `ExecuteHttpRequestUseCase`, `AsyncExecuteHttpRequestUseCase`.
   * Deliverable: Basic `client.get()` and `client.post()` make real HTTP requests with retries and rate limits.

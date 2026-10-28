@@ -61,3 +61,13 @@ class RawStreamEventDTO(DataTransferObject):
     data: str
     id: str | None = None
     retry: int | None = None
+
+
+@dataclass(frozen=True)
+class SpoolRecordDTO(DataTransferObject):
+    """Immutable representation of an enqueued offline request record."""
+
+    sequence_id: int
+    request: HttpRequestDTO
+    created_at: float
+    retry_count: int = 0
