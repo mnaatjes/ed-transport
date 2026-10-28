@@ -44,8 +44,7 @@ How should `ed-transport` deterministically enforce the scope and boundaries def
 ## Decision Outcome
 
 Chosen Option: **Option 3: Multi-Tier Deterministic Enforcement Pipeline**.
-
-### System Boundary & Scope Enforcement Matrix
+### 1. System Boundary & Scope Enforcement Matrix (Use Cases UC-01 to UC-04)
 
 The following matrix systematically maps all in-scope capabilities and out-of-scope constraints from `UC-01` through `UC-04` directly to their automated enforcement mechanisms:
 
@@ -74,6 +73,21 @@ The following matrix systematically maps all in-scope capabilities and out-of-sc
 | **UC-04** | Out-of-Scope | **Game Domain Entities & Enums:** Zero knowledge of star systems, ship modules, commodities, or journal types. | Import Linter & AST | `.importlinter` forbidden contract banning `ed_models.*`; AST check failing if `ed_models` is imported. |
 | **UC-04** | Out-of-Scope | **Serialization / Deserialization:** Zero Pydantic or Msgspec schema mapping of game payloads. | AST Scanner | AST test verifying `core/domain` and `core/use_cases` contain zero model deserialization logic. |
 | **UC-04** | Out-of-Scope | **Semantic Error Interpretation:** Does not interpret business errors inside HTTP 200 responses. | Contract Tests | Unit tests verifying `HttpResponse` returns raw status codes without evaluating application-specific JSON error envelopes. |
+
+---
+
+### 2. Environmental & Technical Boundaries Enforcement Matrix (Risk Register)
+
+The following matrix systematically maps the technical, platform, and operational envelope boundaries defined in `architecture/risk/risk-list.md` to concrete automated verification gates:
+
+| Environmental Boundary | Governing Risk | Boundary Constraint & Operational Envelope | Enforcement Mechanism | Verification Tooling & Rule Reference |
+| :--- | :--- | :--- | :--- | :--- |
+| **Host Networking Environments** | `RISK-06`, `RISK-09` | Cross-platform execution across Linux (desktop/headless), Linux Steam Deck (Proton runtime), and Windows NT. Discrepancies between POSIX and `WSA*` socket error codes. | Local Simulation & CI Matrix | `scripts/run_wine_tests.sh` executing under Wine; GitHub Actions multi-platform matrix; normalized socket exception tests. |
+| **Socket Concurrency Constraints** | `RISK-02`, `RISK-07` | Non-blocking execution within async loops or worker threads without event loop blocking, thread deadlocks, or socket descriptor leaks. | Concurrency Tests & AST | `pytest tests/unit/test_concurrency.py`; AST check prohibiting `time.sleep()` in async engine paths; descriptor leak audit assertions. |
+| **Third-Party API Quotas** | `RISK-01` | Strict destination-specific rate constraints: EDDN persistent pooling, Frontier CAPI burst throttling, Inara/EDSM daily and burst quotas. | Algorithmic Unit Tests | `pytest tests/unit/test_rate_limiter.py` validating token bucket refill, burst clamping, and 429 backoff calculations. |
+| **Storage Footprint Limits** | `RISK-03` | Offline request buffer must strictly respect in-memory ceiling ($\le 10 \text{ MB}$) and bounded disk spillover to protect low-RAM host devices. | Memory / Stress Tests | `pytest tests/unit/test_spool_capacity.py` asserting eviction triggering and memory bounding via `sys.getsizeof` / capacity limits. |
+| **Telemetry Server Perimeter** | `RISK-04`, `RISK-08` | Local HTTP/SSE link with `ed-telemetry` daemon with pre-shared key header injection and strict redaction of sensitive credentials in traces/logs. | Redaction Unit Tests & Security Lints | `pytest tests/unit/test_redaction.py` asserting credentials are masked in logs/exceptions; pre-commit scanner checking for token leakage. |
+| **Domain Model Boundary** | `RISK-10` | Total decoupling from `ed-models` and game journal structures; payload byte opaqueness. | AST & Boundary Linter | `tests/architecture/test_boundaries.py` and `.importlinter` contract enforcing zero imports from `ed_models`. |
 
 ---
 
