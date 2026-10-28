@@ -99,6 +99,22 @@ The following logging responsibilities belong exclusively to host applications a
 
 ---
 
+## Driving Facade Impact and Parameter Surface
+
+The driving adapter facades (`TransportClient` and `AsyncTransportClient`) in `src/ed_transport/adapters/driving/client.py` strictly preserve shared library logging boundaries:
+
+1. **Zero Logging Configuration Parameters:**
+   * The constructors of `TransportClient` and `AsyncTransportClient` **do not accept** logging parameters (e.g. `logger`, `log_level`, `log_format`, or `log_handler`).
+   * Rationale: Inversion of logging control must be handled via Python's standard `logging` hierarchy (`logging.getLogger("ed_transport")`), not by injecting logging objects or setting log levels via client constructor parameters.
+2. **Transparent Module-Level Logger Emission:**
+   * The facades instantiate their own private, namespaced module logger:
+     ```python
+     logger = logging.getLogger(__name__)  # ed_transport.adapters.driving.client
+     ```
+   * Lifecycle actions (client initialization, context entry, client close) and facade dispatch attempts emit events at `DEBUG` level to this logger without altering or exposing logger state to the consumer.
+
+---
+
 ## Mechanical Boundary Enforcement Mechanisms
 
 To guarantee that `ed-transport` never violates these boundaries, `tests/architecture/test_boundaries.py` implements automated AST inspection over all source files in `src/ed_transport/`:
