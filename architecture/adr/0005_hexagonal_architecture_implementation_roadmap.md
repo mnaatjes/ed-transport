@@ -26,6 +26,12 @@ What is the complete, comprehensive inventory of domain entities, driven seconda
 * **Zero Infrastructure Leakage:** Driven adapters encapsulate network engines (`httpx`, `urllib3`), storage engines (`sqlite3`), and OS primitives without leaking types across port boundaries.
 * **Payload Agnosticism (`UC-04`, `RISK-10`):** Pure byte/string handling across all layers; zero coupling to game schemas or `ed-models`.
 * **Concurrency Safety (`RISK-07`):** Explicit separation of synchronous and asynchronous interactors and adapters to prevent event-loop deadlocks.
+* **Library Role Invariants:** `ed-transport` is a shared library dependency, not a standalone daemon. It must never violate library boundaries:
+  1. *Zero Filesystem Assumptions:* Never create files on disk unless the caller explicitly supplies a path (`storage_path`). Default to in-memory buffering.
+  2. *Zero Background Threads / Daemon Spawning:* Never spawn unmanaged background worker threads that outlive caller control. Draining must remain on-demand or caller-orchestrated.
+  3. *Zero Unilateral File Deletion:* Never delete or rename user data files on disk without explicit caller opt-in (`auto_recover=True`). Raise domain errors on corruption.
+  4. *Deterministic Resource Cleanup:* All open sockets and database handles must bind strictly to `client.close()` / `client.aclose()`.
+
 
 ---
 
@@ -106,9 +112,10 @@ Chosen Option: **Implement a 5-tier Hexagonal Component Inventory with Outside-I
 
 * **Existing Components:**
   * `exceptions.py`: `DomainError`, `TransportError`, `TransportTimeoutError`, `TransportConnectionError`, `RateLimitExceededError`, `MaxRetriesExceededError`, `SpoolCapacityExceededError`, `InvalidPayloadTypeError`.
-  * `models.py`: `RateLimitConfig`, `RetryConfig`, `SpoolConfig`.
+  * `models.py`: `RateLimitConfig`, `RetryConfig`, `SpoolConfig` (with `auto_recover_corrupt: bool = False`).
 * **New Components to Build:**
-  * `SpoolRecord`: Immutable domain entity representing a persisted offline request with serial number, timestamp, retry count, and serialized `HttpRequestDTO`.
+  * `SpoolStorageCorruptError` (`exceptions.py`): Raised when unrecoverable database/disk corruption is detected without caller opt-in recovery.
+  * `SpoolRecordDTO` (`src/ed_transport/core/ports/dto/transport_dto.py`): Immutable DTO representing a persisted offline request with serial number, creation timestamp, retry count, and serialized `HttpRequestDTO`.
   * `RateLimitRule`: Value object defining destination endpoint patterns and token bucket replenishment rates.
 
 ---
@@ -131,12 +138,13 @@ All secondary ports must be abstract (`abc.ABC` or `@runtime_checkable Protocol`
    * `async acquire_async(destination: str, timeout: float | None = None) -> bool`
 4. **`SpoolStoragePort` (`spool_storage_port.py`):**
    * SPI for offline request queue persistence.
-   * `push(record: SpoolRecord) -> None`
-   * `pop() -> SpoolRecord | None`
-   * `peek() -> SpoolRecord | None`
+   * `push(record: SpoolRecordDTO) -> None`
+   * `pop() -> SpoolRecordDTO | None`
+   * `peek() -> SpoolRecordDTO | None`
    * `count() -> int`
    * `size_bytes() -> int`
    * `clear() -> None`
+   * `close() -> None`
 5. **`StreamEnginePort` (`stream_engine_port.py`):**
    * Asynchronous SPI for reading chunked SSE network streams.
    * `open_stream(endpoint: str, topic: str) -> AsyncIterator[RawStreamEventDTO]`
@@ -158,12 +166,15 @@ Stateless interactors orchestrating business logic and implementing driving port
    * Implements `SpoolManagerPort`.
    * Injects: `SpoolStoragePort`, `TransportPort`.
    * Dequeues records in FIFO order, dispatches them through the transport interactor, and prunes on success.
+   * *Library Lifecycle Invariant:* Executes strictly on-demand when called via `client.drain_spool()`; never spawns unmanaged background threads or background timer loops.
 4. **`AsyncDrainSpoolBufferUseCase` (`drain_spool_async.py`):**
    * Asynchronous variant implementing `SpoolManagerPort` using `AsyncTransportPort`.
+   * *Library Lifecycle Invariant:* Executes as an awaitable coroutine on-demand (`await client.drain_spool()`); does not register hidden background tasks in active event loops.
 5. **`ConsumeTelemetryStreamUseCase` (`consume_stream.py`):**
    * Implements `TelemetryStreamPort`.
    * Injects: `StreamEnginePort`.
    * Manages reconnection exponential backoff, monotonic event IDs, and yields clean `RawStreamEventDTO` records.
+   * *Library Lifecycle Invariant:* Operates strictly as an asynchronous generator consumed by caller loops (`async for event in client.open_stream(...)`); lifecycle terminates immediately when the caller breaks or cancels the generator.
 
 ---
 
@@ -205,10 +216,10 @@ The components will be delivered in 4 sequential, independently testable phases:
   * Use Cases: `ExecuteHttpRequestUseCase`, `AsyncExecuteHttpRequestUseCase`.
   * Deliverable: Basic `client.get()` and `client.post()` make real HTTP requests with retries and rate limits.
 * **Phase 2: Offline Spooling Subsystem**
-  * Core: `SpoolRecord`, `SpoolStoragePort`.
-  * Adapters: `SqliteSpoolStorageAdapter`, `MemorySpoolStorageAdapter`.
+  * Core: `SpoolRecordDTO`, `SpoolStorageCorruptError`, `SpoolStoragePort`.
+  * Adapters: `SqliteSpoolStorageAdapter` (with WAL mode & busy timeout), `MemorySpoolStorageAdapter`.
   * Use Cases: `DrainSpoolBufferUseCase`, `AsyncDrainSpoolBufferUseCase`.
-  * Deliverable: `client.send_buffered()` and `client.drain_spool()` persist offline requests to disk.
+  * Deliverable: `client.send_buffered()` and `client.drain_spool()` persist offline requests to disk safely without background thread leakage.
 * **Phase 3: Telemetry Streaming Engine**
   * Core: `StreamEnginePort`.
   * Adapters: `SseStreamEngineAdapter`.
@@ -229,7 +240,10 @@ To prevent operational failures identified in the Master Risk Register, the comp
 ### 6.1 Mitigation for `RISK-11`: SQLite Spool Lock Contention & File Corruption
 * **WAL Mode & Busy Timeout:** `SqliteSpoolStorageAdapter` initializes database connections with `PRAGMA journal_mode=WAL` (Write-Ahead Logging) and `PRAGMA busy_timeout=5000` to prevent `database is locked` errors during concurrent thread access.
 * **Serialized Write Gate:** Internal SQLite writes are guarded by a process-level re-entrant lock (`threading.RLock`) to eliminate write transaction collisions.
-* **Automated Corruption Recovery:** If SQLite raises `sqlite3.DatabaseError` on startup or query (e.g. following sudden Steam Deck battery death), the adapter renames the corrupt file (`.corrupt.<timestamp>`), re-initializes a fresh database schema, and logs a critical error without crashing the host daemon.
+* **Caller-Controlled Corruption Handling:** If SQLite raises `sqlite3.DatabaseError` on startup or query (e.g. following sudden Steam Deck battery death):
+  - By default, the adapter raises `SpoolStorageCorruptError` (a `DomainError` subclass) informing the caller of disk corruption without unilateral file tampering.
+  - If the caller explicitly configured `SpoolConfig(auto_recover_corrupt=True)`, the adapter renames the corrupt file (`.corrupt.<timestamp>`), initializes a fresh database schema, and logs a `CRITICAL` error record via `logging.getLogger(__name__)`.
+* **Zero Unprompted Disk Creation:** If `SpoolConfig.storage_path` is empty or unspecified, the client defaults to in-memory spooling (`MemorySpoolStorageAdapter` or `sqlite3.connect(":memory:")`), strictly preventing unwanted disk file creation.
 
 ### 6.2 Mitigation for `RISK-12`: SSE Telemetry Stream Reconnection Storms
 * **Exponential Backoff & Jitter:** `ConsumeTelemetryStreamUseCase` enforces an exponential backoff algorithm with randomized decorrelated jitter on reconnect attempts:
