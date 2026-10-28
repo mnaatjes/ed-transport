@@ -57,7 +57,22 @@ logging.getLogger("ed_transport").addHandler(logging.NullHandler())
 * `logging.NullHandler` acts as a dummy, no-op handler that absorbs and discards all log records silently if no parent handler is configured by the consuming host application.
 * When a host application configures logging (e.g., via `logging.basicConfig()` or custom log handlers), Python's logger hierarchy naturally propagates records from `ed_transport.*` up to the host's configured handlers without interference.
 
-### 2. Internal Emission Rules
+### 2. Core Canonical Logging Conventions
+
+Every module in `ed-transport` must strictly follow these five conventions:
+
+1. **Be Quiet by Default (`NullHandler`):**
+   * Attach `logging.NullHandler()` at library root (`src/ed_transport/__init__.py`). If the caller hasn't set up logs, stay silent. Never print unformatted warnings to `sys.stderr`.
+2. **Name Your Loggers (`__name__`):**
+   * Always instantiate loggers with `logger = logging.getLogger(__name__)`. Modules are clearly identified (e.g. `ed_transport.adapters.driving.client`).
+3. **Hands Off the Steering Wheel (No `basicConfig`):**
+   * Never call `logging.basicConfig()`. The host application owns process-wide configuration.
+4. **No Real Destinations (No Sinks/Handlers):**
+   * Never attach real outputs (files, stdout, sockets) inside the library. The host application decides where records go.
+5. **Lazy Formatting (No f-strings):**
+   * Always write `logger.debug("Dispatching to %s", url)`, never `logger.debug(f"Dispatching to {url}")`. Lazy formatting avoids building strings when debug mode is disabled.
+
+### 3. Internal Emission Rules
 
 All modules within `src/ed_transport/` must adhere strictly to the following emission pattern:
 
@@ -70,9 +85,6 @@ logger = logging.getLogger(__name__)
 logger.debug("Dispatching HTTP %s request to %s", method, url)
 logger.warning("Spool buffer capacity reached %d bytes; dropping oldest payload", current_bytes)
 ```
-
-* Loggers must be instantiated at module scope using `logging.getLogger(__name__)`.
-* String formatting must rely on lazy logger interpolation (`logger.debug("msg %s", arg)`), never pre-formatted f-strings, to avoid performance overhead when the log level is disabled.
 
 ---
 
@@ -125,6 +137,7 @@ To guarantee that `ed-transport` never violates these boundaries, `tests/archite
 4. **Forbid Concrete Handler Instantiation & Imports:** Asserts that forbidden standard library handlers (`StreamHandler`, `FileHandler`, `RotatingFileHandler`, `TimedRotatingFileHandler`, `SysLogHandler`, `SocketHandler`, `MemoryHandler`, `HTTPHandler`) are never imported or instantiated.
 5. **Forbid Third-Party Logging Engines:** Asserts that third-party logging modules (`loguru`, `structlog`, `rich.logging`, `sentry_sdk`) are never imported.
 6. **Forbid Formatter Instantiation:** Asserts that `logging.Formatter` is never instantiated or assigned within library code.
+7. **Forbid f-strings in Logger Calls:** Scans AST `Call` nodes for logger methods (`debug`, `info`, `warning`, `error`, `critical`); asserts that the first argument is not an `ast.JoinedStr` (f-string) to strictly enforce lazy string interpolation.
 
 ---
 
@@ -136,6 +149,6 @@ To guarantee that `ed-transport` never violates these boundaries, `tests/archite
 * Strict architectural invariants are mechanically verified on every commit and pull request.
 * Zero third-party dependency bloat.
 
-### Negative / Trade-offs
+### Expected Maintenance Costs (Design Trade-offs)
 * `ed-transport` cannot output diagnostic logs to the console "out of the box" unless the calling application configures a handler.
 * Developers authoring tests must explicitly attach a handler (e.g. pytest's `caplog` fixture) when verifying emitted log messages.
