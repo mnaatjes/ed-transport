@@ -17,8 +17,9 @@ from ed_transport import (
     create_transport_client,
 )
 from ed_transport.core.domain.exceptions import (
+    DomainError,
+    MaxRetriesExceededError,
     TransportConnectionError,
-    TransportError,
     TransportTimeoutError,
 )
 
@@ -64,16 +65,16 @@ def probe_health_sync(
             )
             return False
 
-    except (TransportConnectionError, TransportTimeoutError) as err:
+    except (TransportConnectionError, TransportTimeoutError, MaxRetriesExceededError) as err:
         duration_ms = (time.monotonic() - start_time) * 1000.0
         _logger.warning(
-            "Health probe FAILED: Target host unreachable (latency=%.1fms): %s",
+            "Health probe FAILED: Target host unreachable after retries (latency=%.1fms): %s",
             duration_ms,
             err,
         )
         return False
-    except TransportError as err:
-        _logger.error("Health probe encounter error: %s", err)
+    except DomainError as err:
+        _logger.error("Health probe domain error: %s", err)
         return False
 
 
