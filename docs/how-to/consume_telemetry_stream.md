@@ -27,8 +27,8 @@ async def handle_telemetry() -> None:
             endpoint="http://127.0.0.1:8080/events",
             topic="journal"
         ):
-            print(f"Event: {event.event_type}, ID: {event.event_id}")
-            print(f"Payload: {event.data.decode('utf-8')}")
+            print(f"Event: {event.event_type}, ID: {event.id}")
+            print(f"Payload: {event.data}")
 
 if __name__ == "__main__":
     asyncio.run(handle_telemetry())
@@ -39,10 +39,10 @@ if __name__ == "__main__":
 ## 2. Parsing Stream Event Data
 
 The stream yields immutable `RawStreamEventDTO` instances containing:
-* `event.event_type`: Event category or SSE event name.
-* `event.data`: Raw `bytes` payload.
-* `event.event_id`: Monotonic event identifier (used for reconnection cursors).
-* `event.timestamp`: Epoch timestamp in seconds.
+* `event.event_type`: Event category or SSE event name (defaults to `"message"`).
+* `event.data`: Event payload decoded as a UTF-8 string.
+* `event.id`: Optional monotonic event identifier (used for reconnection cursors via `Last-Event-ID`).
+* `event.retry`: Optional reconnection delay directive in milliseconds.
 
 ### Example: Decoding JSON Events
 
@@ -52,7 +52,7 @@ import json
 async def process_stream(client: AsyncTransportClient) -> None:
     async for event in client.open_stream("http://127.0.0.1:8080/events", "status"):
         if event.data:
-            payload = json.loads(event.data.decode("utf-8"))
+            payload = json.loads(event.data)
             print(f"Received status update for Commander {payload.get('Commander')}")
 ```
 

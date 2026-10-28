@@ -224,9 +224,9 @@ class HttpResponseDTO(DataTransferObject):
 @dataclass(frozen=True)
 class RawStreamEventDTO(DataTransferObject):
     event_type: str
-    data: bytes
-    event_id: str = ""
-    timestamp: float = 0.0
+    data: str
+    id: str | None = None
+    retry: int | None = None
 ```
 
 ---
