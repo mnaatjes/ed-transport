@@ -29,3 +29,4 @@ Governed by the Rational Unified Process (RUP) Use-Case Specification standard a
 | **UC-01** | [UC-01: Dispatch Resilient HTTP Request](0001_dispatch_resilient_http_request.md) | **approved** | 2026-10-28 | Downstream Integration Client (`ed-capi`, `ed-eddn`, `ed-connectors`, `ed-state`) |
 | **UC-02** | [UC-02: Spool and Drain Offline Telemetry Requests](0002_spool_and_drain_offline_telemetry_requests.md) | **approved** | 2026-10-28 | Downstream Egress Client (`ed-eddn`, `ed-connectors`) |
 | **UC-03** | [UC-03: Consume Telemetry Stream and Local Daemon IPC](0003_consume_telemetry_stream_and_ipc.md) | **approved** | 2026-10-28 | Downstream Consumer (`ed-state`, `ed-connectors`, `ed-cli`) |
+| **UC-04** | [UC-04: Isolate Transport from Domain Models](0004_isolate_transport_from_domain_models.md) | **approved** | 2026-10-28 | Downstream Integration Client (`ed-capi`, `ed-eddn`, `ed-connectors`, `ed-state`) |

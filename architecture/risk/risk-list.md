@@ -24,6 +24,8 @@ The operational envelope of `ed-transport` is bounded by the following environme
 * **Storage Footprint Limits:** Offline in-memory spools must be strictly bounded ($\le 10 \text{ MB}$ default memory ceiling) to prevent starving low-memory host systems.
 * **Telemetry Server Perimeter:** Must communicate seamlessly with `ed-telemetry` over local HTTP/SSE while respecting authentication boundaries (pre-shared key header injection).
 
+* **Domain Model Boundary (ed-models vs ed-transport):** Must maintain complete decoupling from game domain entities, schemas, or journal event models. `ed-transport` treats request and response bodies strictly as opaque payloads (`bytes`, `str`, or generic stream iterators). Serialization, deserialization, and schema validation against domain models belong strictly to consumer clients (`ed-eddn`, `ed-capi`, `ed-connectors`) or `ed-models`.
+
 ---
 
 ## 2. Active Risk Log
@@ -39,3 +41,4 @@ The operational envelope of `ed-transport` is bounded by the following environme
 | **RISK-07** | **Async/Sync Concurrency & Event-Loop Deadlocks:** Client applications invoking `ed-transport` from within active `asyncio` event loops experience deadlocks if transport uses blocking synchronous sleep. | 3 | 4 | **12** | active | Provide clean asynchronous execution paths (`AsyncTransportPort`) alongside thread-safe synchronous facades (`TransportPort`), avoiding `asyncio.run()` inside running loops. |
 | **RISK-08** | **Token Leakage in URLs, Headers, and Traces:** Dynamic credentials (such as `ED_API_KEY`, Inara API keys, or Frontier tokens) leak via query strings or unhandled exception tracebacks. | 3 | 5 | **15** | active | Enforce token masking interceptors; reject API keys passed via URL query parameters in favor of Authorization headers; strip sensitive headers from exception error payloads. |
 | **RISK-09** | **Cross-Platform Socket Errors & Windows NT Discrepancies:** Differences between POSIX socket errnos and Windows `WSA*` error codes cause unhandled failures during network dropouts on Windows. | 3 | 4 | **12** | active | Normalize network socket exceptions in driven adapters; establish local Wine test simulation (`scripts/run_wine_tests.sh`) and multi-platform CI matrices. |
+| **RISK-10** | **Domain Model Infiltration / ed-models Coupling Drift:** Developers or consumers inadvertently introduce dependencies on `ed-models` or specific Elite Dangerous journal schemas into `ed-transport` core, breaking transport generality. | 3 | 4 | **12** | active | Enforce strict import boundary linting (`import-linter`), architecture contract tests (`pytest-archon`), and mandate opaque byte/string payload contracts for all request and response primitives. |
