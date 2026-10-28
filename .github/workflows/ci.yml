@@ -1,0 +1,31 @@
+name: Downstream Hexagonal Boundary & Quality CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    name: Verify Hexagonal Architecture & Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Astral uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Synchronize Virtual Environment & Install Package
+        run: |
+          uv sync --all-extras
+          uv pip install -e .
+
+      - name: Run Deterministic Verification Runner
+        run: uv run python scripts/verify.py

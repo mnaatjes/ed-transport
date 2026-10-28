@@ -1,0 +1,55 @@
+[importlinter]
+root_packages =
+    ed_transport
+include_external_packages = True
+
+[importlinter:contract:core_domain_isolation]
+name = core_domain_isolation
+type = forbidden
+source_modules =
+    ed_transport.core.domain
+forbidden_modules =
+    ed_transport.adapters
+    external
+    frameworks
+
+[importlinter:contract:inward_dependency_direction]
+name = inward_dependency_direction
+type = layers
+layers =
+    ed_transport.adapters
+    ed_transport.core.use_cases
+    ed_transport.core.domain
+
+[importlinter:contract:domain_port_isolation]
+name = domain_port_isolation
+type = forbidden
+source_modules =
+    ed_transport.core.domain
+forbidden_modules =
+    ed_transport.core.ports
+    ed_transport.core.use_cases
+
+[importlinter:contract:use_case_transport_isolation]
+name = use_case_transport_isolation
+type = forbidden
+source_modules =
+    ed_transport.core.use_cases
+forbidden_modules =
+    ed_transport.adapters
+    fastapi
+    starlette
+    flask
+    click
+    typer
+
+[importlinter:contract:composition_root_isolation]
+name = composition_root_isolation
+type = forbidden
+source_modules =
+    ed_transport.core.domain
+    ed_transport.core.ports
+    ed_transport.core.use_cases
+    ed_transport.adapters
+forbidden_modules =
+    ed_transport.bootstrap
