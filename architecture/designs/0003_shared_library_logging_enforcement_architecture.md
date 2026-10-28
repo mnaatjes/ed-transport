@@ -102,23 +102,73 @@ import logging
 logging.getLogger("ed_transport").addHandler(logging.NullHandler())
 ```
 
-### 3.2 AST Verification Functions (`tests/architecture/test_boundaries.py`)
+### 3.2 Opt-In Fleet Logging Bootstrap Factory (`src/ed_transport/bootstrap/logging.py`)
+
+Provides the reusable logging bootstrap helper for fleet applications (`ed-capi`, `ed-eddn`, `ed-connectors`):
+
+```python
+from __future__ import annotations
+
+import logging
+from logging.handlers import RotatingFileHandler
+import os
+from pathlib import Path
+import sys
+
+def get_platform_log_dir(app_name: str) -> Path:
+    """Returns canonical OS log directory according to Homelab Systems Lifecycle standards."""
+    if sys.platform == "win32":
+        local_app_data = os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))
+        return Path(local_app_data) / app_name / "logs"
+    return Path.home() / ".local" / "state" / app_name / "logs"
+
+def configure_fleet_logging(
+    app_name: str,
+    log_dir: Path | None = None,
+    level: int = logging.INFO,
+    max_bytes: int = 5 * 1024 * 1024,
+    backup_count: int = 5,
+) -> Path:
+    """Configures standardized rotating file logging for fleet daemon applications."""
+    target_dir = log_dir or get_platform_log_dir(app_name)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    log_file = target_dir / f"{app_name}.log"
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+
+    handler = RotatingFileHandler(
+        filename=log_file,
+        maxBytes=max_bytes,
+        backupCount=backup_count,
+        encoding="utf-8",
+    )
+    formatter = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s (%(process)d): %(message)s"
+    )
+    handler.setFormatter(formatter)
+    root_logger.addHandler(handler)
+
+    return log_file
+```
+
+### 3.3 AST Verification Functions (`tests/architecture/test_boundaries.py`)
 
 1. **`test_logging_forbids_process_wide_configuration()`**:
    * Walks all AST nodes in `src/ed_transport/`.
    * Forbids any `ast.Call` where `func.attr == "basicConfig"`.
 
-2. **`test_logging_restricts_add_handler_to_root_null_handler()`**:
+2. **`test_logging_restricts_add_handler_calls()`**:
    * Scans all `ast.Call` nodes where `func.attr == "addHandler"`.
-   * Asserts only 1 call exists across the package, located in `src/ed_transport/__init__.py`.
-   * Asserts the argument is an instantiation of `logging.NullHandler`.
+   * Asserts calls are only permitted in:
+     - `src/ed_transport/__init__.py` (passing `NullHandler`)
+     - `src/ed_transport/bootstrap/logging.py` (passing `RotatingFileHandler`)
 
 3. **`test_logging_forbids_in_code_set_level()`**:
-   * Scans all `ast.Call` nodes; asserts `func.attr != "setLevel"`.
+   * Asserts `.setLevel()` is never invoked outside `src/ed_transport/bootstrap/logging.py`.
 
-4. **`test_logging_forbids_concrete_handlers_and_formatters()`**:
-   * Scans `ast.Import` and `ast.ImportFrom` nodes.
-   * Forbids importing `StreamHandler`, `FileHandler`, `RotatingFileHandler`, `TimedRotatingFileHandler`, `SysLogHandler`, `SocketHandler`, `MemoryHandler`, `HTTPHandler`, and `Formatter`.
+4. **`test_logging_forbids_concrete_handlers_and_formatters_outside_bootstrap()`**:
+   * Forbids importing `StreamHandler`, `FileHandler`, `RotatingFileHandler`, `TimedRotatingFileHandler`, `SysLogHandler`, `SocketHandler`, `MemoryHandler`, `HTTPHandler`, and `Formatter` anywhere outside `src/ed_transport/bootstrap/logging.py`.
 
 5. **`test_logging_forbids_third_party_engines()`**:
    * Forbids importing from `loguru`, `structlog`, `rich.logging`, or `sentry_sdk`.
@@ -129,6 +179,19 @@ logging.getLogger("ed_transport").addHandler(logging.NullHandler())
 
 ---
 
-## 4. Verification Plan
+## 4. Documentation Implementation Steps
+
+In accordance with Diataxis standards, the implementation of this subsystem must include:
+
+1. **`docs/how-to/configure_fleet_logging.md`**:
+   * Practical recipes for daemon applications (`ed-capi`, `ed-eddn`, `ed-connectors`) to initialize rotating file logs via `configure_fleet_logging()`.
+   * Details on default log directory resolution (`~/.local/state/` vs `%LOCALAPPDATA%`), rotation thresholds, and log level arguments.
+2. **`docs/reference/transport_client.md`**:
+   * Add `ed_transport.bootstrap.logging` to exported reference symbols.
+   * Document `configure_fleet_logging` signature, parameters, return type, and platform path resolution.
+
+---
+
+## 5. Verification Plan
 
 * Run `.venv/bin/python scripts/verify.py` to ensure pre-commit, import-linter, mypy, and all pytest tests pass.

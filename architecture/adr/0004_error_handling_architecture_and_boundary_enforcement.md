@@ -177,6 +177,24 @@ To verify that these error handling invariants are never breached, `tests/archit
 * Automated jittered retries eliminate thundering herd hazards against community services.
 * Automated AST linters prevent process hijacking or third-party type contamination.
 
-### Negative / Trade-offs
-* Driven adapters must maintain explicit try/except translation blocks for all low-level engine exceptions.
-* Consuming applications must catch `ed_transport` domain exceptions rather than standard library socket errors.
+### Expected Maintenance Costs (Design Trade-offs)
+* **Adapter Translation Overhead:** Driven adapters must maintain explicit `try / except` translation blocks for all low-level engine exceptions to ensure zero third-party leakage.
+* **Domain Exception Catching:** Consuming applications must catch `ed_transport` domain exceptions rather than standard library socket errors.
+
+---
+
+## Documentation Impact and Required Updates
+
+Upon implementation of this ADR, the following documentation must be updated or authored:
+
+1. **Update API Reference (`docs/reference/transport_client.md`):**
+   * Expand Section 5 (Domain Exceptions) to document explicit attributes on each exception:
+     - `TransportTimeoutError`: `endpoint`, `timeout_seconds`, `attempt_count`.
+     - `TransportConnectionError`: `endpoint`, `details`.
+     - `RateLimitExceededError`: `destination_key`, `retry_after_seconds`.
+     - `MaxRetriesExceededError`: `endpoint`, `total_attempts`, `last_error`.
+     - `SpoolCapacityExceededError`: `current_depth`, `capacity_ceiling`.
+     - `InvalidPayloadTypeError`: `invalid_type`.
+   * Document causal exception chaining via `__cause__` and `raise ... from err`.
+2. **Update How-To Guide (`docs/how-to/dispatch_http_requests.md`):**
+   * Expand Section 4 (Handling Transport Exceptions) with targeted examples inspecting diagnostic attributes (e.g. reading `retry_after_seconds` or evaluating `total_attempts` on `MaxRetriesExceededError`).

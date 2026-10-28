@@ -27,3 +27,4 @@ Governed by IEEE 1016-2009 (Standard for Information Technology—Systems Design
 | **SDD-001** | [SDD-001: Scope and Boundary Enforcement Architecture](0001_scope_and_boundary_enforcement_architecture.md) | **approved** | 2026-10-28 | @mnaatjes |
 | **SDD-002** | [SDD-002: TransportClient Driving Facade Implementation Architecture](0002_transport_client_driving_facade_architecture.md) | **draft** | 2026-10-28 | @mnaatjes |
 | **SDD-003** | [SDD-003: Shared Library Logging and AST Boundary Enforcement Architecture](0003_shared_library_logging_enforcement_architecture.md) | **draft** | 2026-10-28 | @mnaatjes |
+| **SDD-004** | [SDD-004: Error Handling Architecture and Boundary Enforcement](0004_error_handling_enforcement_architecture.md) | **draft** | 2026-10-28 | @mnaatjes |

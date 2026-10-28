@@ -127,17 +127,43 @@ The driving adapter facades (`TransportClient` and `AsyncTransportClient`) in `s
 
 ---
 
+## Opt-In Fleet Logging Bootstrap Factory
+
+To eliminate code duplication across fleet daemons (`ed-capi`, `ed-eddn`, `ed-connectors`) while strictly preserving the "No Real Destinations" library rule, `ed-transport` provides an **opt-in helper factory** in `src/ed_transport/bootstrap/logging.py`:
+
+```python
+def configure_fleet_logging(
+    app_name: str,
+    log_dir: Path | None = None,
+    level: int = logging.INFO,
+    max_bytes: int = 5 * 1024 * 1024,
+    backup_count: int = 5,
+) -> Path:
+    """Configures standardized rotating file logging for fleet daemon applications."""
+```
+
+### Architectural Guarantees:
+* **Zero Automatic Execution:** Importing `ed-transport` never invokes this helper. It must be explicitly called by the daemon's CLI entrypoint or `main()`.
+* **Standard Platform Directories:**
+  * Linux / Steam Deck: `~/.local/state/<app_name>/logs/<app_name>.log`
+  * Windows NT: `%LOCALAPPDATA%\<app_name>\logs\<app_name>.log`
+* **Safe Log Rotation:** Implements `RotatingFileHandler` with a strict size cap (default: 5 files × 5 MB = 25 MB max disk usage). Old logs are pruned automatically.
+
+---
+
 ## Mechanical Boundary Enforcement Mechanisms
 
 To guarantee that `ed-transport` never violates these boundaries, `tests/architecture/test_boundaries.py` implements automated AST inspection over all source files in `src/ed_transport/`:
 
 1. **Forbid `logging.basicConfig`:** Scans all AST `Call` nodes; asserts that `logging.basicConfig` is never invoked anywhere in the codebase.
-2. **Forbid Unauthorized `addHandler` Calls:** Asserts that `.addHandler()` is called at most once across the entire codebase, and only within `src/ed_transport/__init__.py` passing an instance of `logging.NullHandler`.
-3. **Forbid In-Code `setLevel` Mutation:** Asserts that `.setLevel()` is never invoked on any logger within library source files.
-4. **Forbid Concrete Handler Instantiation & Imports:** Asserts that forbidden standard library handlers (`StreamHandler`, `FileHandler`, `RotatingFileHandler`, `TimedRotatingFileHandler`, `SysLogHandler`, `SocketHandler`, `MemoryHandler`, `HTTPHandler`) are never imported or instantiated.
-5. **Forbid Third-Party Logging Engines:** Asserts that third-party logging modules (`loguru`, `structlog`, `rich.logging`, `sentry_sdk`) are never imported.
-6. **Forbid Formatter Instantiation:** Asserts that `logging.Formatter` is never instantiated or assigned within library code.
-7. **Forbid f-strings in Logger Calls:** Scans AST `Call` nodes for logger methods (`debug`, `info`, `warning`, `error`, `critical`); asserts that the first argument is not an `ast.JoinedStr` (f-string) to strictly enforce lazy string interpolation.
+2. **Restrict `addHandler` Calls:** Asserts that `.addHandler()` is called only in two sanctioned bootstrap locations:
+   * `src/ed_transport/__init__.py`: Binding `NullHandler()` to the root `"ed_transport"` logger.
+   * `src/ed_transport/bootstrap/logging.py`: Binding `RotatingFileHandler()` inside the opt-in `configure_fleet_logging` factory function.
+3. **Forbid In-Code `setLevel` Mutation:** Asserts that `.setLevel()` is never invoked within library core or adapter modules (only permitted inside the opt-in `bootstrap/logging.py` factory).
+4. **Restrict Concrete Handlers & Formatters:** Asserts that `RotatingFileHandler`, `StreamHandler`, and `Formatter` are never imported outside `src/ed_transport/bootstrap/logging.py`.
+5. **Forbid Third-Party Logging Engines:** Asserts that third-party logging modules (`loguru`, `structlog`, `rich.logging`, `sentry_sdk`) are never imported anywhere.
+6. **Forbid Formatter Instantiation in Core/Adapters:** Asserts that `logging.Formatter` is never instantiated outside `src/ed_transport/bootstrap/logging.py`.
+7. **Forbid f-strings in Logger Calls:** Scans AST `Call` nodes for logger methods (`debug`, `info`, `warning`, `error`, `critical`); asserts that the first argument is not an `ast.JoinedStr` (f-string) to strictly enforce lazy string interpolation across all modules.
 
 ---
 
@@ -152,3 +178,16 @@ To guarantee that `ed-transport` never violates these boundaries, `tests/archite
 ### Expected Maintenance Costs (Design Trade-offs)
 * `ed-transport` cannot output diagnostic logs to the console "out of the box" unless the calling application configures a handler.
 * Developers authoring tests must explicitly attach a handler (e.g. pytest's `caplog` fixture) when verifying emitted log messages.
+
+---
+
+## Documentation Impact and Required Updates
+
+Upon implementation of this ADR, the following documentation must be updated or authored:
+
+1. **New How-To Guide (`docs/how-to/configure_fleet_logging.md`):**
+   * Provide step-by-step instructions for daemon applications (`ed-capi`, `ed-eddn`, `ed-connectors`) to call `configure_fleet_logging()`.
+   * Document platform directory paths (Linux `~/.local/state/` vs Windows `%LOCALAPPDATA%`), log rotation behavior (5 files × 5 MB), and log level overrides.
+2. **Update API Reference (`docs/reference/transport_client.md`):**
+   * Add `ed_transport.bootstrap.logging` exports (`configure_fleet_logging`, `get_platform_log_dir`).
+   * Explicitly document that `TransportClient` and `AsyncTransportClient` adhere to library logging semantics (zero log parameters, silent `NullHandler` root absorption).
