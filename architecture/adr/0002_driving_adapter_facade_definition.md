@@ -113,6 +113,147 @@ The table below maps every operational capability defined across `UC-01` through
 
 ---
 
+## Downstream Consumer Integration Patterns (Code Examples)
+
+The following patterns demonstrate how downstream packages inherit and consume the driving facade.
+
+### 1. Inbound Query: `ed-capi` Querying Frontier Commander Profile
+
+`ed-capi` configures a `TransportClient` injected with a `FrontierOAuth2CredentialProvider`. It issues a `GET` query to Frontier's `/profile` endpoint, receiving raw response bytes that it deserializes into its own internal data structures:
+
+```python
+"""Example implementation inside ed-capi (inbound state enrichment)."""
+
+from typing import Any
+import json
+from ed_transport.adapters.driving.client import TransportClient
+from ed_transport.core.domain.config import RateLimitConfig, RetryConfig
+from ed_capi.adapters.auth import FrontierOAuth2CredentialProvider
+
+class FrontierCapiClient:
+    """High-level Frontier Companion API client powered by ed-transport."""
+
+    def __init__(self, credential_provider: FrontierOAuth2CredentialProvider) -> None:
+        self._transport = TransportClient(
+            credential_provider=credential_provider,
+            rate_limit_config=RateLimitConfig(
+                requests_per_second=0.5,  # 1 request per 2 seconds (Frontier cooldown)
+                burst_capacity=1,
+                destination_key="frontier_capi",
+            ),
+            retry_config=RetryConfig(
+                max_retries=3,
+                base_delay=1.0,
+                max_backoff=10.0,
+                retryable_statuses=frozenset({429, 500, 502, 503, 504}),
+            ),
+        )
+
+    def fetch_commander_profile(self) -> dict[str, Any]:
+        """Pulls commander, shipyard, and outfitting snapshot from Frontier CAPI."""
+        with self._transport as client:
+            response = client.get("https://companion.orerve.net/profile")
+            if response.status_code != 200:
+                raise RuntimeError(f"CAPI request failed: HTTP {response.status_code}")
+
+            # ed-transport returns raw bytes; ed-capi handles JSON deserialization
+            return json.loads(response.body_bytes.decode("utf-8"))
+```
+
+### 2. Outbound Egress: `ed-connectors` Relaying Telemetry to Inara
+
+`ed-connectors` configures an `AsyncTransportClient` with Inara-specific rate-limiting and pre-shared API keys. It serializes a community event payload and dispatches it asynchronously:
+
+```python
+"""Example implementation inside ed-connectors (outbound community egress)."""
+
+from typing import Any
+import json
+from ed_transport.adapters.driving.client import AsyncTransportClient
+from ed_transport.core.domain.config import RateLimitConfig
+from ed_connectors.adapters.auth import InaraApiKeyCredentialProvider
+
+class InaraConnector:
+    """Community egress connector for Inara API v2."""
+
+    def __init__(self, api_key: str, app_name: str, app_version: str) -> None:
+        self._transport = AsyncTransportClient(
+            credential_provider=InaraApiKeyCredentialProvider(api_key=api_key),
+            rate_limit_config=RateLimitConfig(
+                requests_per_second=2.0,
+                burst_capacity=5,
+                destination_key="inara_v2",
+            ),
+        )
+        self._app_name = app_name
+        self._app_version = app_version
+
+    async def publish_event(self, event_name: str, event_data: dict[str, Any]) -> bool:
+        """Serializes and sends an event payload to Inara v2."""
+        payload = {
+            "header": {
+                "appName": self._app_name,
+                "appVersion": self._app_version,
+                "isBeingDeveloped": False,
+            },
+            "events": [
+                {
+                    "eventName": event_name,
+                    "eventTimestamp": "2026-10-28T03:30:00Z",
+                    "eventData": event_data,
+                }
+            ],
+        }
+
+        # ed-transport expects raw bytes or string; ed-connectors serializes
+        wire_payload = json.dumps(payload).encode("utf-8")
+
+        async with self._transport as client:
+            response = await client.post_async(
+                "https://inara.cz/inapi/v2/",
+                body=wire_payload,
+                headers={"Content-Type": "application/json"},
+            )
+            return response.status_code == 200
+```
+
+### 3. Resilient Egress with Offline Spooling: `ed-eddn` Public Data Relay
+
+`ed-eddn` uses `send_buffered` to ensure public market or star system exploration telemetry is never lost when the player suffers transient internet disconnects:
+
+```python
+"""Example implementation inside ed-eddn (public data relay with offline spooling)."""
+
+from ed_transport.adapters.driving.client import TransportClient
+from ed_transport.core.domain.config import SpoolConfig
+
+class EddnGateway:
+    """Public EDDN data gateway with automated offline request spooling."""
+
+    def __init__(self) -> None:
+        self._transport = TransportClient(
+            spool_config=SpoolConfig(
+                max_capacity=5000,
+                memory_limit_bytes=10 * 1024 * 1024,  # 10 MB ceiling
+                eviction_policy="DropOldest",
+            )
+        )
+
+    def relay_system_scan(self, serialized_eddn_json: bytes) -> bool:
+        """Submits EDDN schema-validated message or spools if offline."""
+        with self._transport as client:
+            # If host network drops, send_buffered safely buffers request to FIFO queue
+            success = client.send_buffered(
+                url="https://eddn.edcd.io/upload/",
+                method="POST",
+                body=serialized_eddn_json,
+                headers={"Content-Type": "application/json"},
+            )
+            return success
+```
+
+---
+
 ## Consequences
 
 ### Positive
