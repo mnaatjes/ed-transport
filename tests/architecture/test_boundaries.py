@@ -847,3 +847,113 @@ def test_dto_immutability_and_structural_purity() -> None:
                                 f"DTO {node.name} field uses forbidden mutable/framework type: "
                                 f"{ann_id}"
                             )
+
+
+def test_zero_ed_models_or_game_domain_imports() -> None:
+    """Asserts that no file in ed_transport imports ed_models or game domain entities.
+
+    Enforces UC-04 and RISK-10.
+    """
+    pkg_root = _get_package_root()
+
+    for py_file in pkg_root.rglob("*.py"):
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    assert not alias.name.startswith("ed_models"), (
+                        f"Violation in {py_file.relative_to(pkg_root)}: "
+                        f"Illegal import of ed_models ('{alias.name}')"
+                    )
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                assert not node.module.startswith("ed_models"), (
+                    f"Violation in {py_file.relative_to(pkg_root)}: "
+                    f"Illegal import from ed_models ('{node.module}')"
+                )
+
+
+def test_zero_schema_validation_or_database_frameworks_in_core() -> None:
+    """Asserts that core layers contain no schema validation or persistent database frameworks.
+
+    Enforces UC-01 boundaries.
+    """
+    pkg_root = _get_package_root()
+    core_dirs = [
+        pkg_root / "core" / "domain",
+        pkg_root / "core" / "ports",
+        pkg_root / "core" / "use_cases",
+    ]
+    forbidden_frameworks = {
+        "jsonschema",
+        "fastjsonschema",
+        "pydantic",
+        "msgspec",
+        "sqlite3",
+        "sqlalchemy",
+        "alembic",
+        "psutil",
+        "netifaces",
+    }
+
+    for core_dir in core_dirs:
+        for py_file in core_dir.rglob("*.py"):
+            tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        root_mod = alias.name.split(".")[0]
+                        assert root_mod not in forbidden_frameworks, (
+                            f"Violation in {py_file.relative_to(pkg_root)}: "
+                            f"Illegal framework import: '{alias.name}'"
+                        )
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    root_mod = node.module.split(".")[0]
+                    assert root_mod not in forbidden_frameworks, (
+                        f"Violation in {py_file.relative_to(pkg_root)}: "
+                        f"Illegal framework import: '{node.module}'"
+                    )
+
+
+def test_zero_root_logger_mutation_in_library() -> None:
+    """Asserts that no module configures root loggers or calls logging.basicConfig (UC-01)."""
+    pkg_root = _get_package_root()
+
+    for py_file in pkg_root.rglob("*.py"):
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                if isinstance(node.func, ast.Attribute) and node.func.attr == "basicConfig":
+                    raise AssertionError(
+                        f"Library file {py_file.relative_to(pkg_root)} illegally invokes "
+                        "logging.basicConfig()"
+                    )
+
+
+def test_zero_os_daemon_lifecycle_management_in_core() -> None:
+    """Asserts that transport core does not attempt process spawning or daemon control (UC-03)."""
+    pkg_root = _get_package_root()
+    core_dirs = [
+        pkg_root / "core" / "domain",
+        pkg_root / "core" / "ports",
+        pkg_root / "core" / "use_cases",
+    ]
+    forbidden_modules = {"subprocess", "os.system", "popen", "pty"}
+
+    for core_dir in core_dirs:
+        for py_file in core_dir.rglob("*.py"):
+            tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        rel_path = py_file.relative_to(pkg_root)
+                        assert alias.name not in forbidden_modules, (
+                            f"Core file {rel_path} imports forbidden lifecycle module: "
+                            f"{alias.name}"
+                        )
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    root_mod = node.module.split(".")[0]
+                    rel_path = py_file.relative_to(pkg_root)
+                    assert root_mod not in forbidden_modules, (
+                        f"Core file {rel_path} imports forbidden lifecycle module: "
+                        f"{node.module}"
+                    )
