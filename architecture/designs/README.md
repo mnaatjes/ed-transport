@@ -28,3 +28,4 @@ Governed by IEEE 1016-2009 (Standard for Information Technology—Systems Design
 | **SDD-002** | [SDD-002: TransportClient Driving Facade Implementation Architecture](0002_transport_client_driving_facade_architecture.md) | **draft** | 2026-10-28 | @mnaatjes |
 | **SDD-003** | [SDD-003: Shared Library Logging and AST Boundary Enforcement Architecture](0003_shared_library_logging_enforcement_architecture.md) | **draft** | 2026-10-28 | @mnaatjes |
 | **SDD-004** | [SDD-004: Error Handling Architecture and Boundary Enforcement](0004_error_handling_enforcement_architecture.md) | **draft** | 2026-10-28 | @mnaatjes |
+| **SDD-005** | [SDD-005: Hexagonal Architecture Core and Driven Adapter Implementation Architecture](0005_hexagonal_architecture_core_and_driven_adapters.md) | **draft** | 2026-10-28 | @mnaatjes |
