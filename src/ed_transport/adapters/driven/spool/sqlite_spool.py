@@ -74,6 +74,12 @@ class SqliteSpoolStorageAdapter(SpoolStoragePort):
                 self._conn.commit()
 
             except sqlite3.DatabaseError as err:
+                if self._conn:
+                    try:
+                        self._conn.close()
+                    except Exception:
+                        pass
+                    self._conn = None
                 if self._auto_recover and self._db_path != ":memory:":
                     _logger.critical(
                         "Spool database corrupted at %s; recovering (%s)", self._db_path, err
