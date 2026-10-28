@@ -25,6 +25,7 @@ architecture/
 |-- README.md                      # Directory contract & governance index (this document)
 |-- risk/                          # Project Management Discipline (Master Risk Register)
 |-- use-cases/                     # Requirements Discipline (RUP Use-Case Specifications)
+|-- research/                      # Platform & Protocol Empirical Research Ledger
 |-- adr/                           # Analysis & Design Discipline (MADR 3.0 Decision Records)
 |-- designs/                       # Analysis & Design / Implementation (IEEE 1016 SDDs)
 |-- rfcs/                          # Requirements & Architectural Consensus Proposals
