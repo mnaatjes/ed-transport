@@ -1,1 +1,5 @@
-"""Driving (inbound / primary) adapters (HTTP routes, CLI, event consumers)."""
+"""Exposed driving adapters."""
+
+from .client import AsyncTransportClient, TransportClient
+
+__all__ = ["AsyncTransportClient", "TransportClient"]

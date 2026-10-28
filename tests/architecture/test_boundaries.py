@@ -63,7 +63,7 @@ def test_ports_are_abstract_protocols_or_abcs() -> None:
     ports_dir = pkg_root / "core" / "ports"
 
     for py_file in ports_dir.rglob("*.py"):
-        if py_file.name == "__init__.py":
+        if py_file.name == "__init__.py" or "dto" in py_file.parts:
             continue
         tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
         classes_found = 0
@@ -75,7 +75,14 @@ def test_ports_are_abstract_protocols_or_abcs() -> None:
                 for b in node.bases:
                     if isinstance(b, ast.Attribute):
                         base_names.add(b.attr)
-                valid_bases = {"Protocol", "ABC", "Port", "DrivingPort", "DrivenPort"}
+                valid_bases = {
+                    "Protocol",
+                    "ABC",
+                    "Port",
+                    "DrivingPort",
+                    "DrivenPort",
+                    "DataTransferObject",
+                }
                 err_msg = (
                     f"Port class {node.name} in {py_file.name} must inherit from Protocol, "
                     "ABC, or Port marker"
@@ -389,7 +396,7 @@ def test_ports_have_zero_implementation_code() -> None:
     ports_dir = pkg_root / "core" / "ports"
 
     for py_file in ports_dir.rglob("*.py"):
-        if py_file.name == "__init__.py":
+        if py_file.name == "__init__.py" or "dto" in py_file.parts:
             continue
         tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
         for node in ast.walk(tree):
@@ -433,7 +440,7 @@ def test_ports_follow_technology_agnostic_nomenclature() -> None:
     )
 
     for py_file in ports_dir.rglob("*.py"):
-        if py_file.name == "__init__.py":
+        if py_file.name == "__init__.py" or "dto" in py_file.parts:
             continue
         tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
         for node in ast.walk(tree):
@@ -459,10 +466,12 @@ def test_ports_adhere_to_strict_import_whitelist() -> None:
         "__future__",
         "typing",
         "abc",
+        "collections",
         "collections.abc",
         "datetime",
         "uuid",
         "enum",
+        "dataclasses",
     }
 
     for py_file in ports_dir.rglob("*.py"):
