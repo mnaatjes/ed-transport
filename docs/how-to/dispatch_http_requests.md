@@ -112,24 +112,31 @@ Catch domain exceptions defined under `ed_transport.core.domain.exceptions`:
 
 ```python
 from ed_transport.core.domain.exceptions import (
-    TransportConnectionError,
-    TransportTimeoutError,
+    MaxRetriesExceededError,
     RateLimitExceededError,
+    TransportConnectionError,
     TransportError,
+    TransportTimeoutError,
 )
 
 try:
     response = client.get("https://api.example.com/health")
-except TransportTimeoutError:
-    # Socket read or connection timeout
-    logger.warning("Gateway timed out")
-except TransportConnectionError:
-    # DNS failure or network drop
-    logger.error("Unable to reach remote host")
-except RateLimitExceededError:
-    # Token bucket quota exhausted
-    logger.info("Throttled; backing off")
+except TransportTimeoutError as err:
+    # Inspect timeout diagnostic details:
+    logger.warning("Endpoint %s timed out after %ss (attempt %d)",
+                   err.endpoint, err.timeout_seconds, err.attempt_count)
+except TransportConnectionError as err:
+    # Network disconnect or DNS failure:
+    logger.error("Connection to %s failed: %s", err.endpoint, err.details)
+except RateLimitExceededError as err:
+    # Rate limit exhausted; pause execution:
+    logger.info("Destination %s saturated. Retry after %.2fs",
+                err.destination_key, err.retry_after_seconds)
+except MaxRetriesExceededError as err:
+    # All retry attempts failed:
+    logger.critical("Exhausted all %d attempts for %s. Last failure: %s",
+                    err.total_attempts, err.endpoint, err.last_error)
 except TransportError as err:
-    # Base fallback for all transport domain errors
-    logger.error("Transport failed: %s", err)
+    # Base fallback for all transport domain errors:
+    logger.error("Transport failed: %s (cause: %s)", err, err.__cause__)
 ```
