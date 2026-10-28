@@ -24,4 +24,4 @@ Governed by IEEE 1016-2009 (Standard for Information Technology—Systems Design
 
 | Number | Title | Status | Date | Primary Author |
 | :---: | :--- | :---: | :---: | :--- |
-| *(Pending Elaboration authoring)* | | | | |
+| **SDD-001** | [SDD-001: Scope and Boundary Enforcement Architecture](0001_scope_and_boundary_enforcement_architecture.md) | **draft** | 2026-10-28 | @mnaatjes |
