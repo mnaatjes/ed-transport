@@ -160,6 +160,12 @@ def parse_args() -> argparse.Namespace:
         help="Optional SSE topic filter (e.g. journal, status)",
     )
     parser.add_argument(
+        "--api-key",
+        type=str,
+        default=None,
+        help="Pre-shared API key or Bearer token for authentication",
+    )
+    parser.add_argument(
         "--timeout",
         type=float,
         default=5.0,
@@ -185,9 +191,16 @@ async def main_async() -> int:
     base_url = f"http://{args.host}:{args.port}"
     print(f"Targeting ed-telemetry at: {base_url}")
 
+    default_headers: dict[str, str] = {}
+    if args.api_key:
+        default_headers["Authorization"] = f"Bearer {args.api_key}"
+
     # Mode 1: Synchronous REST probe
     if args.mode in ("rest", "both"):
-        with create_transport_client() as sync_client:
+        import httpx
+
+        sync_httpx = httpx.Client(headers=default_headers, follow_redirects=True)
+        with create_transport_client(httpx_client=sync_httpx) as sync_client:
             probe_health_sync(
                 client=sync_client,
                 base_url=base_url,
@@ -197,7 +210,11 @@ async def main_async() -> int:
 
     # Mode 2: Asynchronous SSE Stream
     if args.mode in ("stream", "both"):
-        async with create_async_transport_client() as async_client:
+        import httpx
+
+        async_httpx = httpx.AsyncClient(headers=default_headers, timeout=None)
+        async_client = create_async_transport_client(httpx_client=async_httpx)
+        try:
             await stream_telemetry_async(
                 client=async_client,
                 base_url=base_url,
@@ -205,6 +222,10 @@ async def main_async() -> int:
                 topic=args.topic,
                 max_events=args.max_events,
             )
+        finally:
+            await async_client.aclose()
+            await async_httpx.aclose()
+            await asyncio.sleep(0.01)
 
     return 0
 
